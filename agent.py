@@ -27,6 +27,10 @@ unless you are teaching that term). Use relatable Indian everyday analogies (ope
 library, asking a teacher, searching notes before an exam). Avoid idioms and slang. Explain every
 technical term in simple words the first time it appears, and show it in **bold**. Structure: problem -> core idea
 -> how it works step by step -> one worked example with real sample text -> key takeaways.
+Write ONLY the lesson itself, addressed to the learner: never mention the learner profile, these
+instructions, or word/sentence limits inside the lesson. In examples, never invent page numbers,
+sources or statistics beyond the sample text you show. Avoid shorthand such as "top-k" and avoid
+words like "mathematical space" - explain ideas with everyday words only.
 Use headings: 'What is ...?', 'Why does it matter?', 'How does it work?', a worked example
 section, and 'Key takeaways'. 800-1400 words. Output ONLY the lesson Markdown."""
 
@@ -67,8 +71,9 @@ def generate(topic, memory_text, feedback=None, prev=None, inject=False):
         fb = "\n".join(f"- [{f['id']}] {f['reason']}\n  FIX: {f['guide']}" for f in feedback)
         user += (f"\n\nYour previous draft was REJECTED by the reviewer.\nPREVIOUS DRAFT:\n<<<\n{prev}\n>>>\n"
                  f"FAILED CHECKPOINTS:\n{fb}\n\nRewrite the full lesson fixing every failure "
-                 f"while keeping what already worked.")
-    return complete(GEN_SYSTEM, user, role="generator", temperature=0.7, max_tokens=3500)
+                 f"while keeping what already worked. IMPORTANT: keep the FULL lesson (800-1400 words) with ALL sections: "
+                 f"What is, Why does it matter, How does it work, Worked example, Key takeaways. Do not shorten or drop sections.")
+    return complete(GEN_SYSTEM, user, role="generator", temperature=0.7, max_tokens=6000)
 
 
 def summarize_change(old, new, failures):
@@ -76,7 +81,7 @@ def summarize_change(old, new, failures):
     return complete("You compare two lesson drafts. Reply in 1-2 plain sentences.",
                     f"Failed checks: {ids}\n\nOLD:\n{old}\n\nNEW:\n{new}\n\n"
                     "What concretely changed in NEW to address the failures?",
-                    role="judge", temperature=0, max_tokens=200)
+                    role="judge", temperature=0, max_tokens=1500)
 
 
 # ---------- MAIN LOOP ----------

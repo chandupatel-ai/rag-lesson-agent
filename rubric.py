@@ -52,9 +52,17 @@ LLM_CHECKS = {
               "everyday words, no idioms, relatable Indian analogies (open-book exam, library)."),
     "L6_no_jargon": dict(
         dim="clear, no unexplained jargon",
-        q="Is every technical term (LLM, embedding, vector, token, chunk, hallucination, "
-          "index...) explained in plain words at or before its first use? Name any offenders.",
+        q="Is every technical term explained in plain words at or before its first use? Check "
+          "specifically: LLM/language model, embedding, vector, vector database, chunk, prompt, "
+          "hallucination. FAIL if any is used without a simple explanation. Name any offenders.",
         guide="Define every technical term in plain words the first time it appears."),
+    "L8_consistent": dict(
+        dim="accurate & grounded",
+        q="Is the lesson internally consistent and free of overclaims? FAIL if a stated count does not "
+          "match what is listed (e.g. 'four steps' but ten are shown), or if it makes absolute claims "
+          "such as 'works for any language/document/question', 'always correct', or 'keeps data "
+          "private' without conditions.",
+        guide="Make counts match the lists. Avoid absolute claims; say 'usually', 'can', or 'depends on the setup'."),
     "L7_flow": dict(
         dim="coherent teaching flow",
         q="Does it build logically (problem -> idea -> how it works -> example -> recap) with no "
@@ -65,6 +73,21 @@ LLM_CHECKS = {
 
 def _headings(md):
     return [h.lower() for h in re.findall(r"^#{1,6}\s+(.*)$", md, re.M)]
+
+
+def _tables_ok(md: str) -> bool:
+    """Every row of every Markdown table must have the same number of cells as its header."""
+    prose = re.sub(r"```.*?```", "", md, flags=re.S)
+    def cells(row): return len(row.strip().strip("|").split("|"))
+    block = []
+    for line in prose.splitlines() + [""]:
+        if line.strip().startswith("|"):
+            block.append(line)
+            continue
+        if len(block) >= 2 and any(cells(x) != cells(block[0]) for x in block):
+            return False
+        block = []
+    return True
 
 
 def rule_checks(md: str) -> list[dict]:
@@ -87,14 +110,29 @@ def rule_checks(md: str) -> list[dict]:
          not re.search(r"TODO|\[insert|lorem ipsum", md, re.I | re.M),
          "Contains placeholder or unfinished text.",
          "No placeholders; finish every section."),
+        ("R6_tables_wellformed", "coherent teaching flow",
+         _tables_ok(md),
+         "A table has a row with missing or extra cells.",
+         "Every table row must have the same number of cells as the header row."),
+        ("R7_no_prompt_leak", "clear, no unexplained jargon",
+         not re.search(r"12th.?grade|this lesson is (written )?for|all sentences are short|"
+                       r"non-english|limited english|word limit", md, re.I),
+         "The lesson mentions its own instructions or the learner profile (prompt leakage).",
+         "Write only the lesson for the learner; never mention the audience description or writing rules."),
+        ("R8_no_absolute_claims", "accurate & grounded",
+         not re.search(r"(cannot|can't|can not|never|impossible to) (make up|invent|hallucinate|lie)|"
+                       r"(eliminates?|removes?|ends?|stops?) (all )?hallucination|no hallucination|"
+                       r"hallucination[- ]free|100 ?%|always (correct|accurate|true)", md, re.I),
+         "Absolute claim found (e.g. 'the model cannot make up facts'). RAG only REDUCES hallucination.",
+         "Say RAG 'reduces' or 'lowers the chance of' wrong answers. Never say it makes errors impossible."),
     ]
     prose = re.sub(r"```.*?```", "", md, flags=re.S)
-    sents = [s for s in re.split(r"(?<=[.!?])\s+", re.sub(r"[#*>`|-]", " ", prose)) if len(s.split()) > 2]
+    sents = [s for s in re.split(r"(?<=[.!?])\s+|\n+", re.sub(r"[#*>`|-]", " ", prose)) if len(s.split()) > 2]
     lens = [len(s.split()) for s in sents] or [0]
     avg, mx = sum(lens) / len(lens), max(lens)
-    ok = avg <= 16 and mx <= 35
+    ok = avg <= 18 and mx <= 40
     checks.append(("R5_simple_sentences", "beginner-friendly language", ok,
-                   f"Sentences too long for a limited-English reader (avg {avg:.1f} words, longest {mx}); need avg <= 16, max <= 35.",
+                   f"Sentences too long for a limited-English reader (avg {avg:.1f} words, longest {mx}); need avg <= 18, max <= 40.",
                    "Split long sentences. Keep most between 8 and 15 words."))
     return [dict(id=i, dim=d, kind="rule", passed=p, reason="ok" if p else r, guide=g)
             for i, d, p, r, g in checks]
@@ -123,7 +161,7 @@ Include every checkpoint id listed above."""
     for _ in range(2):  # one retry if the judge returns junk
         try:
             verdict = parse_json(complete(JUDGE_SYSTEM, user, role="judge",
-                                          temperature=0, max_tokens=2000))
+                                          temperature=0, max_tokens=6000))
             break
         except Exception:
             continue
